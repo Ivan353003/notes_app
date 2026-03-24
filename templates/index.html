@@ -1,0 +1,27 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Нотатки</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body>
+    <div class="container">
+        <h1>Мої нотатки</h1>
+
+        <div class="notes-list">
+            {% for note in notes %}
+                <div class="note-card">
+                    <h2  class="note-title">{{ note.title }}</h2>
+                    <ul>
+                        {% for item in note.items %}
+                            <li>{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>
