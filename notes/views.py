@@ -1,5 +1,6 @@
 from django.http import HttpResponse
 from django.shortcuts import render
+from .models import Note
 
 
 def hello_notes(request):
@@ -21,3 +22,7 @@ def notes_view(request):
         },
     ]
     return render(request, 'index.html', {'notes': notes})
+
+def notes_list(request):
+    notes = Note.objects.all()
+    return render(request, 'notes_list.html', {'notes': notes})
