@@ -1,0 +1,11 @@
+{% for note in notes %}
+    <p>
+    <a href="{{ note.get_absolute_url }}">{{ note.title }}</a>
+    </p>
+{% endfor %}
+
+<form method="get">
+    <input type="date" name="reminder" placeholder="Фільтр за часом нагадування">
+    <input type="text" name="title" placeholder="Пошук за title">
+    <button type="submit">Шукати</button>
+</form>

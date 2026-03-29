@@ -1,0 +1,4 @@
+<p>{{ note.title }} {{ note.text }}</p>
+
+<a href="{% url 'note_edit' note.pk %}">Редагувати</a>
+<a href="{% url 'note_delete' note.pk %}">Видалити</a>
