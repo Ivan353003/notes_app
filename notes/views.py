@@ -42,18 +42,15 @@ class NoteListView(ListView):
     model = Note
     template_name = 'list_notes.html'
     context_object_name = 'notes'
+    pk_url_kwarg = 'note_id'
+    paginate_by = 10
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        title = self.request.GET.get('title')
-        category = self.request.GET.get('category')
-        reminder = self.request.GET.get('reminder')
-
-        if title:
-            queryset = queryset.filter(title__icontains=title)
-
-        if reminder:
-            queryset = queryset.filter(reminder__date=reminder)
+        queryset = Note.objects.select_related('category')
+        search_query = self.request.GET.get('search')
+        if search_query:
+            queryset = queryset.filter(
+                title__icontains=search_query)
 
         return queryset
 

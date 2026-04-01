@@ -1,5 +1,35 @@
-<form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Зберегти</button>
-</form>
+{% extends 'base.html' %}
+
+{% block content %}
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-8 offset-md-2">
+                <h2 class="mb-4">
+                    {% if form.instance.pk %}
+                        Редагування нотатки
+                    {% else %}
+                        Створення нової нотатки
+                    {% endif %}
+                </h2>
+                <div class="card">
+                    <div class="card-body">
+                        <form method="post">
+                            {% csrf_token %}
+                            {% for field in form %}
+                                <div class="mb-3">
+                                    <label class="form-label">{{ field.label }}</label>
+                                    {{ field.errors }}
+                                    {{ field }}
+                                </div>
+                            {% endfor %}
+                            <div class="mt-4">
+                                <button type="submit" class="btn btn-primary">Зберегти</button>
+                                <a href="{% url 'list_notes' %}" class="btn btn-light">Назад</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
