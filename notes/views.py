@@ -1,9 +1,12 @@
+from django.contrib import messages
 from django.http import HttpResponse
-from django.shortcuts import render
+from django.contrib.auth import authenticate, login, logout
+from django.shortcuts import render, redirect
+
 from .models import Note
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DetailView, UpdateView, DeleteView, ListView
-from .forms import NoteForm
+from .forms import NoteForm, LoginForm, RegisterForm
 from datetime import timedelta
 from datetime import datetime
 
@@ -75,3 +78,40 @@ class NoteDeleteView(DeleteView):
     context_object_name = 'note'
     pk_url_kwarg = 'note_id'
     success_url = reverse_lazy('list_notes')
+
+def login_view(request):
+    if request.method == 'GET':
+        form = LoginForm()
+        return render(request, 'login.html', {'form': form})
+
+    elif request.method == 'POST':
+        form = LoginForm(request.POST)
+        if form.is_valid():
+            username = form.cleaned_data['username']
+            password = form.cleaned_data['password']
+            user = authenticate(request, username=username, password=password)
+
+            if user is not None:
+                login(request, user)
+                messages.success(request, f'Вітаємо, {username}')
+                return redirect('list_notes')
+    return render(request, 'login.html', {'form': form})
+
+def register_view(request):
+    if request.method == 'GET':
+        form = RegisterForm()
+        return render(request, 'register.html', {'form': form})
+
+    elif request.method == 'POST':
+        form = RegisterForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+            messages.success(request, 'Реєстрація успішна')
+            return redirect('list_notes')
+        return render(request, 'register.html', {'form': form})
+
+def logout_view(request):
+    logout(request)
+    messages.success(request, 'Ви вийшли з системи')
+    return redirect('login')
