@@ -8,3 +8,5 @@ venv/
 .vscode/
 .DS_Store
 .DS_Store
+
+config_local.py
