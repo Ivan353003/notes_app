@@ -21,6 +21,27 @@ def test_note_creation():
 
 
 @pytest.mark.django_db
+def test_note_read(note):
+    found_note = Note.objects.get(id=note.id)
+
+    assert found_note.id == note.id
+    assert found_note.title == note.title
+    assert found_note.text == note.text
+    assert found_note.category == note.category
+
+
+@pytest.mark.django_db
+def test_note_update(note):
+    note.title = 'Оновлена нотатка'
+    note.text = 'Новий текст'
+    note.save()
+
+    updated_note = Note.objects.get(id=note.id)
+    assert updated_note.title == 'Оновлена нотатка'
+    assert updated_note.text == 'Новий текст'
+
+
+@pytest.mark.django_db
 def test_note_str(note):
     note.title = 'Тестова нотатка'
     note.save()
