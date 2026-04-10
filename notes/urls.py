@@ -13,5 +13,8 @@ urlpatterns = [
     path('<int:note_id>/', NoteDetailView.as_view(), name='note_detail'),
     path('<int:note_id>/edit/', NoteUpdateView.as_view(), name='note_edit'),
     path('<int:note_id>/delete/', NoteDeleteView.as_view(), name='note_delete'),
+    path('import/sync/', SyncBookImportView.as_view(), name='sync_import'),
+    path('import/async/', AsyncBookImportView.as_view(), name='async_import'),
+    path('import/comparison/', HttpClientComparisonView.as_view(), name='http_comparison'),
 
 ]

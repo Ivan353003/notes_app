@@ -1,14 +1,25 @@
+import asyncio
+import ssl
+from concurrent.futures import ThreadPoolExecutor
+
+import aiohttp
+import certifi
+import httpx
+from asgiref.sync import sync_to_async
 from django.contrib import messages
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.contrib.auth import authenticate, login, logout
 from django.shortcuts import render, redirect
 
-from .models import Note
+from .models import Note, ExternalBook
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DetailView, UpdateView, DeleteView, ListView
 from .forms import NoteForm, LoginForm, RegisterForm
 from datetime import timedelta
 from datetime import datetime
+import time
+from django.views import View
+import requests
 
 
 def hello_notes(request):
@@ -115,3 +126,293 @@ def logout_view(request):
     logout(request)
     messages.success(request, 'Ви вийшли з системи')
     return redirect('login')
+
+
+class SyncBookImportView(View):
+    def get(self, request):
+        return render(request, 'book_import.html', {'view_type': 'sync'})
+
+    def post(self, request):
+        start_time = time.time()
+        isbn_list = [
+            '9780545010221',  # Harry Potter
+            '9780061120084',  # To Kill a Mockingbird
+            '9780451524935',  # 1984
+            '9780007123209',  # The Hobbit
+            '9780316769174',  # The Catcher in the Rye
+            '9780385490818',  # The Da Vinci Code
+            '9780553296983',  # Dune
+            '9780141439518',  # Pride and Prejudice
+            '9780439708180',  # The Hunger Games
+            '9780062315007',  # The Alchemist
+        ]
+        results = []
+        errors = []
+
+        for isbn in isbn_list:
+            try:
+                response = requests.get(
+                    f'https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data',
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    book_key = f"ISBN:{isbn}"
+                    if book_key in data:
+                        book_data = data[book_key]
+                        external_book, created = ExternalBook.objects.get_or_create(
+                            external_id=isbn,
+                            defaults={
+                                'title': book_data.get('title', 'unknown title'),
+                                'author_name': ', '.join([author.get('name', 'Unknown') for author in book_data.get('authors', [])]),
+                                'description': book_data.get('subtitle', ''),
+                                'isbn': isbn
+                            }
+                        )
+                        results.append({
+                            'isbn': isbn,
+                            'title': external_book.title,
+                            'created': created
+                        })
+                    else:
+                        errors.append(f'Книга з ISBN: {isbn} не знайдена!')
+                else:
+                    errors.append(f'Помилка АПІ для ISBN: {isbn}: {response.status_code}')
+
+            except requests.RequestException as e:
+                errors.append(f'Помилка АПІ для ISBN: {isbn}:  {str(e)}')
+        end_time = time.time()
+        execution_time = end_time - start_time
+
+        return JsonResponse({
+            'success': True,
+            'execution_time': round(execution_time, 2),
+            'results_count': len(results),
+            'errors_count': len(errors),
+            'results': results,
+            'errors': errors,
+            'type': 'sync'
+        })
+
+
+class AsyncBookImportView(View):
+    async def get(self, request):
+        return render(request, 'book_import.html', {'view_type': 'async'})
+
+    async def post(self, request):
+        start_time = time.time()
+        isbn_list = [
+            '9780545010221',  # Harry Potter
+            '9780061120084',  # To Kill a Mockingbird
+            '9780451524935',  # 1984
+            '9780007123209',  # The Hobbit
+            '9780316769174',  # The Catcher in the Rye
+            '9780385490818',  # The Da Vinci Code
+            '9780553296983',  # Dune
+            '9780141439518',  # Pride and Prejudice
+            '9780439708180',  # The Hunger Games
+            '9780062315007',  # The Alchemist
+        ]
+        results = []
+        errors = []
+        async def fetch_book(session, isbn):
+            try:
+                ssl_context = ssl.create_default_context(cafile=certifi.where())
+                url = f'https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data'
+                async with session.get(url, timeout=10, ssl=ssl_context) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        book_key = f"ISBN:{isbn}"
+                        if book_key in data:
+                            book_data = data[book_key]
+                            external_book, created = await sync_to_async(ExternalBook.objects.get_or_create)(
+                                external_id=isbn,
+                                defaults={
+                                    'title': book_data.get('title', 'unknown title'),
+                                    'author_name': ', '.join(
+                                        [author.get('name', 'Unknown') for author in book_data.get('authors', [])]),
+                                    'description': book_data.get('subtitle', ''),
+                                    'isbn': isbn
+                                }
+                            )
+                            return {
+                                'isbn': isbn,
+                                'title': external_book.title,
+                                'created': created
+                            }
+                        else:
+                            return {'error': f'Книга з ISBN: {isbn} не знайдена!'}
+                    else:
+                        return {'error': f'Помилка АПІ для ISBN: {isbn}: {response.status}'}
+
+
+            except Exception as e:
+                return {'error': f'Помилка АПІ для ISBN: {isbn}: {str(e)}'}
+
+        async with aiohttp.ClientSession() as session:
+            tasks = [fetch_book(session, isbn) for isbn in isbn_list]
+            responses = await asyncio.gather(*tasks)
+
+        for response in responses:
+            if 'error' in response:
+                errors.append(response['error'])
+            else:
+                results.append(response)
+
+        end_time = time.time()
+        execution_time = end_time - start_time
+
+        return JsonResponse({
+            'success': True,
+            'execution_time': round(execution_time, 2),
+            'results_count': len(results),
+            'errors_count': len(errors),
+            'results': results,
+            'errors': errors,
+            'type': 'async'
+        })
+
+
+class HttpClientComparisonView(View):
+    """View для порівняння різних HTTP-клієнтів"""
+
+    async def get(self, request):
+        return render(request, 'http_comparison.html')
+
+    async def post(self, request):
+        client_type = request.POST.get('client_type', 'requests')
+
+        isbn_list = [
+            '9780545010221', '9780061120084', '9780451524935',
+            '9780007123209', '9780316769174'
+        ]
+
+        start_time = time.time()
+
+        if client_type == 'requests':
+            results = await self._test_requests(isbn_list)
+        elif client_type == 'httpx_sync':
+            results = await self._test_httpx_sync(isbn_list)
+        elif client_type == 'httpx_async':
+            results = await self._test_httpx_async(isbn_list)
+        elif client_type == 'aiohttp':
+            results = await self._test_aiohttp(isbn_list)
+        elif client_type == 'requests_threading':
+            results = await self._test_requests_threading(isbn_list)
+
+        end_time = time.time()
+        execution_time = end_time - start_time
+
+        return JsonResponse({
+            'client_type': client_type,
+            'execution_time': round(execution_time, 2),
+            'results_count': len(results),
+            'results': results
+        })
+
+    async def _test_requests(self, isbn_list):
+        """Тестування з requests (синхронно) - обгорнуто в sync_to_async"""
+
+        def sync_requests():
+            results = []
+            for isbn in isbn_list:
+                try:
+                    response = requests.get(
+                        f'https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data',
+                        timeout=5
+                    )
+                    if response.status_code == 200:
+                        results.append({'isbn': isbn, 'status': 'success'})
+                    else:
+                        results.append({'isbn': isbn, 'status': 'error'})
+                except:
+                    results.append({'isbn': isbn, 'status': 'error'})
+            return results
+
+        return await sync_to_async(sync_requests)()
+
+    async def _test_httpx_sync(self, isbn_list):
+        """Тестування з httpx (синхронно) - обгорнуто в sync_to_async"""
+
+        def sync_httpx():
+            results = []
+            with httpx.Client(timeout=5) as client:
+                for isbn in isbn_list:
+                    try:
+                        response = client.get(
+                            f'https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data'
+                        )
+                        if response.status_code == 200:
+                            results.append({'isbn': isbn, 'status': 'success'})
+                        else:
+                            results.append({'isbn': isbn, 'status': 'error'})
+                    except:
+                        results.append({'isbn': isbn, 'status': 'error'})
+            return results
+
+        return await sync_to_async(sync_httpx)()
+
+    async def _test_httpx_async(self, isbn_list):
+        """Тестування з httpx (асинхронно)"""
+        results = []
+        async with httpx.AsyncClient(timeout=5) as client:
+            async def fetch_isbn(isbn):
+                try:
+                    response = await client.get(
+                        f'https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data'
+                    )
+                    if response.status_code == 200:
+                        return {'isbn': isbn, 'status': 'success'}
+                    else:
+                        return {'isbn': isbn, 'status': 'error'}
+                except:
+                    return {'isbn': isbn, 'status': 'error'}
+
+            tasks = [fetch_isbn(isbn) for isbn in isbn_list]
+            results = await asyncio.gather(*tasks)
+        return results
+
+    async def _test_aiohttp(self, isbn_list):
+        """Тестування з aiohttp (асинхронно)"""
+        results = []
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(5)) as session:
+            async def fetch_isbn(isbn):
+                try:
+                    async with session.get(
+                            f'https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data'
+                    ) as response:
+                        if response.status == 200:
+                            return {'isbn': isbn, 'status': 'success'}
+                        else:
+                            return {'isbn': isbn, 'status': 'error'}
+                except:
+                    return {'isbn': isbn, 'status': 'error'}
+
+            tasks = [fetch_isbn(isbn) for isbn in isbn_list]
+            results = await asyncio.gather(*tasks)
+        return results
+
+    async def _test_requests_threading(self, isbn_list):
+        """Тестування з requests + threading"""
+
+        def fetch_isbn(isbn):
+            try:
+                response = requests.get(
+                    f'https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data',
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    return {'isbn': isbn, 'status': 'success'}
+                else:
+                    return {'isbn': isbn, 'status': 'error'}
+            except:
+                return {'isbn': isbn, 'status': 'error'}
+
+        # Виконання в окремому потоці для уникнення блокування
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            results = await loop.run_in_executor(
+                executor,
+                lambda: list(map(fetch_isbn, isbn_list))
+            )
+        return results

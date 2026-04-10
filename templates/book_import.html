@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Імпорт книг - {{ view_type|title }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .btn { padding: 10px 20px; background: #007cba; color: white; border: none; cursor: pointer; }
+        .btn:hover { background: #005a85; }
+        .results { margin-top: 20px; padding: 20px; background: #f5f5f5; border-radius: 5px; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Імпорт книг ({{ view_type|title }})</h1>
+
+        <form id="importForm" method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn">Запустити {{ view_type }} імпорт</button>
+        </form>
+
+        <div id="results" class="results" style="display: none;">
+            <h3>Результати:</h3>
+            <div id="resultsContent"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('importForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const btn = document.querySelector('.btn');
+            btn.disabled = true;
+            btn.textContent = 'Виконується...';
+
+            const formData = new FormData(this);
+
+            try {
+                const response = await fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                document.getElementById('results').style.display = 'block';
+                document.getElementById('resultsContent').innerHTML = `
+                    <p><strong>Тип:</strong> ${data.type}</p>
+                    <p><strong>Час виконання:</strong> ${data.execution_time} секунд</p>
+                    <p><strong>Успішно завантажено:</strong> ${data.results_count} книг</p>
+                    <p><strong>Помилок:</strong> ${data.errors_count}</p>
+                    ${data.errors.length > 0 ? '<div class="error">Помилки: ' + data.errors.join(', ') + '</div>' : ''}
+                `;
+            } catch (error) {
+                alert('Помилка: ' + error.message);
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Запустити {{ view_type }} імпорт';
+        });
+    </script>
+</body>
+</html>
